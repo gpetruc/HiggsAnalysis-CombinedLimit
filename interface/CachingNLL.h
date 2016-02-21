@@ -183,6 +183,8 @@ class CachingSimNLL  : public RooAbsReal {
         static bool optimizeContraints_;
         std::vector<double> constrainZeroPoints_;
         std::vector<double> constrainZeroPointsFast_;
+
+  ClassDef(CachingSimNLL,1) // CachingSimNLL
 };
 
 }

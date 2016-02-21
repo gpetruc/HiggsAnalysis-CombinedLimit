@@ -6,6 +6,7 @@
 #include "HiggsAnalysis/CombinedLimit/interface/CombDataSetFactory.h"
 #include "HiggsAnalysis/CombinedLimit/interface/TH1Keys.h"
 #include "HiggsAnalysis/CombinedLimit/interface/RooSimultaneousOpt.h"
+#include "HiggsAnalysis/CombinedLimit/interface/CachingNLL.h"
 #include "HiggsAnalysis/CombinedLimit/interface/SimpleCacheSentry.h"
 #include "HiggsAnalysis/CombinedLimit/interface/th1fmorph.h"
 #include "HiggsAnalysis/CombinedLimit/interface/HZZ4LRooPdfs.h"

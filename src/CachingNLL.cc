@@ -1023,3 +1023,6 @@ cacheutils::CachingSimNLL::getParameters(const RooArgSet* depList, Bool_t stripD
 {
     return new RooArgSet(params_); 
 }
+
+using cacheutils::CachingSimNLL;
+ClassImp(CachingSimNLL)
