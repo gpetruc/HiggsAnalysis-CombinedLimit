@@ -1,3 +1,4 @@
+#include "HiggsAnalysis/CombinedLimit/interface/RooMinimizerOpt.h"
 #include "HiggsAnalysis/CombinedLimit/interface/MaxLikelihoodFit.h"
 #include "RooRealVar.h"
 #include "RooArgSet.h"

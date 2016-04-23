@@ -275,7 +275,7 @@ RooFitResult *FitterAlgoBase::doFit(RooAbsPdf &pdf, RooAbsData &data, const RooA
                 minim.setErrorLevel(delta95);
                 minim.improve(verbose-1);
                 minim.setErrorLevel(delta95);
-                if (minim.minos(RooArgSet(r)) != -1) {
+                if (minim.minos(RooArgSet(r))) {
                     rf.setRange("err95", r.getVal() + r.getAsymErrorLo(), r.getVal() + r.getAsymErrorHi());
                 }
                 minim.setErrorLevel(delta68);

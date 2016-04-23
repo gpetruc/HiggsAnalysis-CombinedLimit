@@ -1,5 +1,5 @@
 #include "HiggsAnalysis/CombinedLimit/interface/RooMinimizerOpt.h"
-
+#if 0
 #include <stdexcept>
 #include <RooRealVar.h>
 #include <RooAbsPdf.h>
@@ -650,3 +650,4 @@ void RooMinimizerFcnOpt::initStdVects() const {
       }
   }
 }
+#endif

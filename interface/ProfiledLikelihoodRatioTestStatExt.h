@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-class RooMinimizerOpt;
+#include "HiggsAnalysis/CombinedLimit/interface/RooMinimizerOpt.h"
 #include <RooAbsPdf.h>
 #include <RooAbsData.h>
 #include <RooArgSet.h>

@@ -4,11 +4,14 @@
 #if defined(ROO_MINIMIZER) || defined(ROO_MINIMIZER_FCN)
    #error "You cannot include RooMinimizer.h or RooMinimizerFcn.h before RooMinimizerOpt.h"
 #else
-   #define private protected
+   //#define private protected
    #include <RooMinimizer.h>
-   #undef protected
+   //#undef protected
 #endif
 
+typedef RooMinimizer RooMinimizerOpt ;
+
+#if 0
 class RooMinimizerOpt : public RooMinimizer {
     public:
         RooMinimizerOpt(RooAbsReal& function) ;
@@ -50,5 +53,5 @@ class RooMinimizerFcnOpt : public RooMinimizerFcn {
         };
         mutable std::vector<OptBound> _optimzedBounds;
 };
-
+#endif
 #endif
