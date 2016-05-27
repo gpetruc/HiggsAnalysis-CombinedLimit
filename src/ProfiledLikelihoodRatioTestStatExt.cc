@@ -406,7 +406,7 @@ double ProfiledLikelihoodTestStatOpt::minNLL(bool constrained, RooRealVar *r)
 }
 
 //============================================================ProfiledLikelihoodRatioTestStatExt
-bool nllutils::robustMinimize(RooAbsReal &nll, RooMinimizerOpt &minim, int verbosity, bool zeroPoint) 
+bool nllutils::robustMinimize(RooAbsReal &nll, RooMinimizer &minim, int verbosity, bool zeroPoint) 
 {
     static bool do_debug = (runtimedef::get("DEBUG_MINIM") || runtimedef::get("DEBUG_PLTSO") > 1);
     double initialNll = nll.getVal();
