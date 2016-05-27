@@ -461,8 +461,9 @@ bool nllutils::robustMinimize(RooAbsReal &nll, RooMinimizerOpt &minim, int verbo
             break;
         } else if (tries != maxtries) {
             std::auto_ptr<RooFitResult> res(do_debug ? minim.save() : 0);
-            //PerfCounter::add("Minimizer.save() called for failed minimization"); 
-            if (tries > 0 && minim.edm() < 0.05*ROOT::Math::MinimizerOptions::DefaultTolerance()) {
+            //PerfCounter::add("Minimizer.save() called for failed minimization");
+            double edm = minim.fitter()->Result().Edm();
+            if (tries > 0 && edm < 0.05*ROOT::Math::MinimizerOptions::DefaultTolerance()) {
                 DBG(DBG_PLTestStat_main, (printf("\n  --> acceptable: status %d, edm %10.7f, nll initial % 10.4f, nll final % 10.4f, change %10.5f\n", status, res->edm(), initialNll, nll.getVal(), initialNll - nll.getVal())))
                 if (do_debug) printf("\n  --> acceptable: status %d, edm %10.7f, nll initial % 10.4f, nll final % 10.4f, change %10.5f\n", status, res->edm(), initialNll, nll.getVal(), initialNll - nll.getVal());
                 COUNT_ONE("nllutils::robustMinimize: accepting fit with bad status but good EDM")
