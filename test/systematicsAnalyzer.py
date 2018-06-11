@@ -2,13 +2,16 @@
 import re
 import os.path
 from math import *
+from HiggsAnalysis.CombinedLimit.DatacardParser import parseCard, addDatacardParserOptions
 from optparse import OptionParser
 
 parser = OptionParser()
+addDatacardParserOptions(parser)
+parser.remove_option("--fix-pars")
+parser.remove_option("--ascii")
+parser.remove_option("--stat")
 parser.add_option("-f", "--format",  type="string",   dest="format", default="html", help="Format for output number (choose html or brief)")
-parser.add_option("-m", "--mass",    dest="mass",     default=0,  type="float",  help="Higgs mass to use. Will also be written in the Workspace as RooRealVar 'MH'.")
 parser.add_option("-p", "--process",    dest="process",     default=None,  type="string",  help="Higgs process to use. Will also be written in the Workspace as RooRealVar 'MH'.")
-parser.add_option("-D", "--dataset", dest="dataname", default="data_obs",  type="string",  help="Name of the observed dataset")
 parser.add_option("-s", "--search", "--grep", dest="grep", default=[], action="append",  type="string",  help="Selection of nuisance parameters (regexp, can be used multiple times)")
 parser.add_option("-a", "--all", dest="all", default=False,action='store_true',  help="Report all nuisances (default is only lnN)")
 parser.add_option("", "--noshape", dest="noshape", default=False,action='store_true',  help="Counting experiment only (alternatively, build a shape analysis from combineCards.py -S card.txt > newcard.txt )")
@@ -34,8 +37,7 @@ import ROOT
 ROOT.gROOT.SetBatch(True)
 ROOT.gSystem.Load("libHiggsAnalysisCombinedLimit")
 
-from HiggsAnalysis.CombinedLimit.DatacardParser import *
-from HiggsAnalysis.CombinedLimit.ShapeTools     import *
+from HiggsAnalysis.CombinedLimit.ShapeTools import ShapeBuilder
 if options.fileName.endswith(".gz"):
     import gzip
     file = gzip.open(options.fileName, "rb")
