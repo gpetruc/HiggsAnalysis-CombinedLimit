@@ -2,15 +2,17 @@
 import re
 import os.path
 from math import *
+from HiggsAnalysis.CombinedLimit.DatacardParser import parseCard, addDatacardParserOptions
 from optparse import OptionParser
 
 parser = OptionParser()
+addDatacardParserOptions(parser)
+parser.remove_option("--fix-pars")
+parser.remove_option("--compiled")
 parser.add_option("-c", "--channel", type="string", dest="channel", default=None, help="Channel to dump")
 parser.add_option("-N", "--norm-only",   dest="norm",    default=False, action="store_true", help="Include only normalization uncertainties, not shape ones") 
 parser.add_option("-f", "--format", type="string", dest="format", default="%8.3f +/- %6.3f", help="Format for output number")
 parser.add_option("--xs", "--exclude-syst", type="string", dest="excludeSyst", default=[], action="append", help="Systematic to exclude (regexp)")
-parser.add_option("-m", "--mass",     dest="mass",     default=0,  type="float",  help="Higgs mass to use. Will also be written in the Workspace as RooRealVar 'MH'.")
-parser.add_option("-D", "--dataset",  dest="dataname", default="data_obs",  type="string",  help="Name of the observed dataset")
 (options, args) = parser.parse_args()
 options.stat = False
 options.bin = True # fake that is a binary output, so that we parse shape lines
@@ -37,7 +39,7 @@ file = open(args[0], "r")
 DC = parseCard(file, options)
 if not DC.hasShapes: DC.hasShapes = True
 MB = ShapeBuilder(DC, options)
-for b in DC.bins:
+for b in sorted(DC.bins):
     print " ============= ", b , "===================="
     if options.channel != None and (options.channel != b): continue
     exps = {}
@@ -67,6 +69,7 @@ for b in DC.bins:
             elif pdf == 'lnN':
                 exps[p][1].append(max(errline[b][p], 1.0/errline[b][p])-1.);
             elif ("shape" in pdf) and not options.norm:
+              if MB.isShapeSystematic(b,p,lsyst):
                 s0 = MB.getShape(b,p)
                 sUp   = MB.getShape(b,p,lsyst+"Up")
                 sDown = MB.getShape(b,p,lsyst+"Down")
@@ -74,6 +77,8 @@ for b in DC.bins:
                     ratios = [sUp.Integral()/s0.Integral(), sDown.Integral()/s0.Integral()]
                     ratios += [1/ratios[0], 1/ratios[1]]
                     exps[p][1].append(max(ratios) - 1)
+              else:
+                exps[p][1].append(max(errline[b][p], 1.0/errline[b][p])-1.);
     procs = DC.exp[b].keys(); procs.sort()
     fmt = ("%%-%ds " % max([len(p) for p in procs]))+"  "+options.format;
     for p in procs:
