@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import re
+import re,sys
 import os.path
 from math import *
 from HiggsAnalysis.CombinedLimit.DatacardParser import parseCard, addDatacardParserOptions
@@ -14,7 +14,10 @@ parser.add_option("-f", "--format",  type="string",   dest="format", default="ht
 parser.add_option("-p", "--process",    dest="process",     default=None,  type="string",  help="Higgs process to use. Will also be written in the Workspace as RooRealVar 'MH'.")
 parser.add_option("-s", "--search", "--grep", dest="grep", default=[], action="append",  type="string",  help="Selection of nuisance parameters (regexp, can be used multiple times)")
 parser.add_option("-a", "--all", dest="all", default=False,action='store_true',  help="Report all nuisances (default is only lnN)")
-parser.add_option("", "--noshape", dest="noshape", default=False,action='store_true',  help="Counting experiment only (alternatively, build a shape analysis from combineCards.py -S card.txt > newcard.txt )")
+parser.add_option("--noshape", dest="noshape", default=False,action='store_true',  help="Counting experiment only (alternatively, build a shape analysis from combineCards.py -S card.txt > newcard.txt )")
+parser.add_option("--vtol", "--val-tolerance", dest="vtol", default=2.5, type="float", help="Higlight nuisances whose kappa is larger than this amount (def.: 2.5) ")
+parser.add_option("--atol", "--asym-tolerance", dest="atol", default=0.5, type="float", help="Report nuisances which are highly asymmetric: ln(kup*kdown) > X, default = 0.5")
+parser.add_option("--sstol", "--samesign-tolerance", dest="sstol", default=0.05, type="float", help="Report nuisances which go both on the same direction, if both are at least x (default 0.05)")
 (options, args) = parser.parse_args()
 options.stat = False
 options.bin = True # fake that is a binary output, so that we parse shape lines
@@ -75,6 +78,17 @@ def commonStems(list, sep="_"):
     return ret 
     
 report = {}; errlines = {}; outParams = {}
+warn = set()
+warn_chann = set()
+warn_chann_proc = set()
+warn_proc = set()
+def dowarn(s,c,p,X):
+    warn.add(s)
+    warn_chann.add((s,c))
+    warn_proc.add((s,p))
+    warn_chann_proc.add((s,c,p))
+    sys.stderr.write("WARNING for nuisance %s, channel %s, process %s (yield %g): %s\n" % (s,c,p,DC.exp[c][p],X))
+
 for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
     if ("param" in pdf) or ("Param" in pdf) or ("discrete" in pdf): 
     	 if options.all: outParams[lsyst]=[pdf,pdfargs]
@@ -117,6 +131,13 @@ for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
                 if val < 1: val = 1.0/val
                 minEffect = min(minEffect, val)
                 maxEffect = max(maxEffect, val)
+            if max(max(vals),1/min(vals)) > options.vtol:
+                dowarn(lsyst,b,p,"very large or small kappa: %s" % (" / ".join(map(str,vals))))
+            elif len(vals) > 1:
+                if log(max(vals))*log(min(vals)) > 0 and min(max(v,1/v) for v in vals) > 1+options.sstol:
+                    dowarn(lsyst,b,p,"same-signed kappa: %s" % (" / ".join(map(str,vals))))
+                elif log(max(vals)*min(vals)) > options.atol:
+                    dowarn(lsyst,b,p,"very asymmetric kappa: %s" % (" / ".join(map(str,vals))))
         if numKeysFound == 0 : channels.remove(b)
     channelsShort = commonStems(channels)
     types = ",".join(set(types))
@@ -148,6 +169,7 @@ if "html" in options.format:
 body { font-family: 'Consolas', 'Courier New', courier, monospace; font-size: small; }
 td, th { border-bottom: 1px solid black; padding: 1px 1em; vertical-align: top; }
 td.channDetails { font-size: x-small; }
+.WARN { color: red; font-weight: bold; }
 </style>
 <script type="text/javascript">
 function toggleChann(id) {
@@ -166,18 +188,28 @@ function toggleChann(id) {
 <table>
 <tr><th>Nuisance (types)</th><th colspan="2">Range</th><th>Processes</th><th>Channels</th></tr>
 """
+    def maywarn(x,nuis,chann=None,proc=None):
+        if proc != None and chann != None: 
+             iswarn = ((nuis,chann,proc) in warn_chann_proc) 
+        elif proc != None:
+             iswarn = ((nuis,proc) in warn_proc) 
+        elif chann != None: 
+             iswarn = ((nuis,chann) in warn_chann)
+        else: 
+             iswarn = (nuis in warn)
+        return ("<span class=\"WARN\">%s</span>" % x) if iswarn else x
     for nuis in names:
         val = report[nuis]
-        print "<tr><td><a name=\"%s\"><b>%s</b></a></td>" % (nuis,nuis+"  ("+val['types']+")")
+        print "<tr><td><a name=\"%s\"><b>%s</b></a></td>" % (nuis,maywarn(nuis,nuis)+"  ("+val['types']+")")
         #print "<td>%5.3f</td><td>%5.3f</td>" % ( val['effect'][0],val['effect'][1] )
-        print "<td>%s</td><td>%s</td>" % ( val['effect'][0],val['effect'][1] )
-        print "<td>",", ".join(val['processes']), "</td>"
+        print "<td>%s</td><td>%s</td>" % ( maywarn(val['effect'][0],nuis),maywarn(val['effect'][1],nuis) )
+        print "<td>",", ".join((maywarn(p,nuis,proc=p) for p in val['processes'])), "</td>"
         print "<td>%s" % ", ".join(["%s(%d)" % (k,v) for (k,v) in sorted(val['channels'])]),
         print "<a id=\"%s_chann_toggle\" href=\"#%s\" onclick=\"toggleChann(&quot;%s&quot;)\">[+]</a></td>" % (nuis,nuis,nuis)
         print "</tr>"
         print "<tr id=\"%s_chann\" style=\"display: none\">" % nuis
         print "\t<td colspan=\"5\"><table class=\"channDetails\">" 
-        for x in sorted(val["bins"]): print "\t\t<tr><td>%s</td><td>%s</td></li>" % (x, ", ".join(["%s(%s)"%(k,v) for (k,v) in errlines[nuis][x].iteritems() if v != 0]))
+        for x in sorted(val["bins"]): print "\t\t<tr><td>%s</td><td>%s</td></li>" % (maywarn(x,nuis,x), ", ".join([maywarn("%s(%s)"%(k,v),nuis,x,k) for (k,v) in errlines[nuis][x].iteritems() if v != 0]))
         print "\t</table></td>"
         print "</tr>\n"
     for x in outParams.keys():
