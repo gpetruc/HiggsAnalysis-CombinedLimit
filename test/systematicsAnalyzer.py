@@ -3,6 +3,7 @@ import re,sys
 import os.path
 from math import *
 from HiggsAnalysis.CombinedLimit.DatacardParser import parseCard, addDatacardParserOptions
+from collections import defaultdict
 from optparse import OptionParser
 
 parser = OptionParser()
@@ -28,7 +29,6 @@ options.fixpars = False
 options.libs = []
 options.verbose = 0
 options.poisson = 0
-options.nuisancesToExclude = []
 options.noJMax = True
 options.allowNoSignal = True
 options.modelparams = [] 
@@ -143,6 +143,13 @@ for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
     types = ",".join(set(types))
     report[lsyst] = { 'channels':channelsShort, 'bins' : channels, 'processes': sorted(processes.keys()), 'effect':("%5.3f"%minEffect,"%5.3f"%maxEffect), 'types':types }
 
+# Compute total yields per channel
+yields_s, yields_b, yields_t = defaultdict(float), defaultdict(float), {}
+for b in DC.bins:
+    for p,y in DC.exp[b].iteritems():
+        (yields_s if p in DC.signals else yields_b)[b] += y
+    yields_t[b] = yields_s[b] + yields_b[b] 
+
 # Get list
 names = report.keys() 
 if "brief" in options.format:
@@ -209,11 +216,18 @@ function toggleChann(id) {
         print "</tr>"
         print "<tr id=\"%s_chann\" style=\"display: none\">" % nuis
         print "\t<td colspan=\"5\"><table class=\"channDetails\">" 
-        for x in sorted(val["bins"]): print "\t\t<tr><td>%s</td><td>%s</td></li>" % (maywarn(x,nuis,x), ", ".join([maywarn("%s(%s)"%(k,v),nuis,x,k) for (k,v) in errlines[nuis][x].iteritems() if v != 0]))
+        for x in sorted(val["bins"]): 
+            binspan="total yields: sig %.2f, bkg %.2f, tot %.2f" % (yields_s[x],yields_b[x],yields_t[x])
+            binprocs = []
+            for (k,v) in sorted(errlines[nuis][x].iteritems()):
+                if v == 0: continue
+                binprocspan = "yield: %.3f; totals: sig %.2f, bkg %.2f, tot %.2f" % (DC.exp[x][k], yields_s[x],yields_b[x],yields_t[x])
+                binprocs.append( maywarn("<span title=\"%s\">%s(%s)</span>"%(binprocspan, k,v),nuis,x,k) )
+            print "\t\t<tr><td><span title=\"%s\">%s</span></td><td>%s</td></tr>" % (binspan,maywarn(x,nuis,x), ", ".join(binprocs))
         print "\t</table></td>"
         print "</tr>\n"
     for x in outParams.keys():
-        print "\t\t<tr><td><b>%s(%s)</b></td><td>%s</td></li>" % (x,  outParams[x][0] , ", ".join([a for a in outParams[x][1]]))
+        print "\t\t<tr><td><b>%s(%s)</b></td><td>%s</td>" % (x,  outParams[x][0] , ", ".join([a for a in outParams[x][1]]))
         print "</tr>\n"
     print """
 </table>
