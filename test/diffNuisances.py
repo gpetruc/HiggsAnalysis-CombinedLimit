@@ -113,7 +113,7 @@ for i in range(fpf_s.getSize()):
     else:
         # get best-fit value and uncertainty at prefit for this 
         # nuisance parameter
- 	if nuis_p.getErrorLo()==0 : nuis_p.setErrorLo(nuis_p.getErrorHi())
+ 	if nuis_p.getErrorLo()==0 : nuis_p.setAsymError(nuis_p.getErrorHi(),nuis_p.getErrorHi())
         mean_p, sigma_p, sigma_pu,sigma_pd = (nuis_p.getVal(), nuis_p.getError(),nuis_p.getErrorHi(),nuis_p.getErrorLo())
 
 	if not sigma_p > 0: sigma_p = (nuis_p.getMax()-nuis_p.getMin())/2
@@ -129,7 +129,7 @@ for i in range(fpf_s.getSize()):
 	    nuisIsSymm = abs(abs(nuis_x.getErrorLo())-abs(nuis_x.getErrorHi()))<0.01 or nuis_x.getErrorLo() == 0
             if nuisIsSymm : row += [ "%+.2f +/- %.2f" % (nuis_x.getVal(), nuis_x.getError()) ]
 	    else: row += [ "%+.2f +%.2f %.2f" % (nuis_x.getVal(), nuis_x.getErrorHi(), nuis_x.getErrorLo()) ]
- 	    if nuis_x.getErrorLo()==0 : nuis_x.setErrorLo(nuis_x.getErrorHi())
+ 	    if nuis_x.getErrorLo()==0 : nuis_x.setAsymError(nuis_x.getErrorHi(),nuis_x.getErrorHi())
             if nuis_p != None:
 	        if options.plotfile: 
 	          if fit_name=='b':
