@@ -19,7 +19,12 @@ parser.add_option("--noshape", dest="noshape", default=False,action='store_true'
 parser.add_option("--vtol", "--val-tolerance", dest="vtol", default=2.5, type="float", help="Higlight nuisances whose kappa is larger than this amount (def.: 2.5) ")
 parser.add_option("--atol", "--asym-tolerance", dest="atol", default=0.5, type="float", help="Report nuisances which are highly asymmetric: ln(kup*kdown) > X, default = 0.5")
 parser.add_option("--sstol", "--samesign-tolerance", dest="sstol", default=0.05, type="float", help="Report nuisances which go both on the same direction, if both are at least x (default 0.05)")
+parser.add_option("--plot", dest="plotShapes", default=[], action="append",  type="string",  help="Make plots of shapes for the nuisances for this nuisance (regexp, can specify multilple times)")
+parser.add_option("--plot-flagged", dest="plotFlagged", default=False, action='store_true', help="Make plots of shapes for the nuisances, bins and processes that are flagged")
+parser.add_option("--icon-plot-url", dest="plotIconUrl", default="https://twiki.cern.ch//twiki/pub/TWiki/TWikiDocGraphics/chart-bar.gif", type="string",  help="URL of icon used to link to plots") 
+
 (options, args) = parser.parse_args()
+real_out = options.out if options.out else "-"
 options.stat = False
 options.bin = True # fake that is a binary output, so that we parse shape lines
 options.out = "tmp.root"
@@ -33,11 +38,25 @@ options.noJMax = True
 options.allowNoSignal = True
 options.modelparams = [] 
 
-# import ROOT with a fix to get batch mode (http://root.cern.ch/phpBB3/viewtopic.php?t=3198)
-import sys
-sys.argv = [ '-b-']
+
 import ROOT
 ROOT.gROOT.SetBatch(True)
+ROOT.PyConfig.IgnoreCommandLineOptions = True
+
+if options.plotShapes or options.plotFlagged:
+    if real_out == "-" or options.format != "html": 
+        sys.stderr.write("ERROR, --plot requires to save the output to a file with -o / --out, and to use -f html\n")
+        exit(1)
+    else:
+        plotdir = real_out.replace(".html","")+".dir"
+        sys.stderr.write("Info: plots will be saved in %s\n" % plotdir)
+        if not os.path.isdir(plotdir): os.system("mkdir -p "+plotdir)
+        if os.path.exists("/afs/cern.ch"): os.system("cp /afs/cern.ch/user/g/gpetrucc/php/index.php "+plotdir) # better way of getting this?
+        c1 = ROOT.TCanvas("c1","c1")
+        ROOT.gErrorIgnoreLevel = ROOT.kWarning
+if real_out != "-" and os.path.dirname(real_out) and not os.path.isdir(os.path.dirname(real_out)): 
+    os.system("mkdir -p "+os.path.dirname(real_out))
+
 ROOT.gSystem.Load("libHiggsAnalysisCombinedLimit")
 
 from HiggsAnalysis.CombinedLimit.ShapeTools import ShapeBuilder
@@ -89,6 +108,9 @@ def dowarn(s,c,p,X):
     warn_chann_proc.add((s,c,p))
     sys.stderr.write("WARNING for nuisance %s, channel %s, process %s (yield %g): %s\n" % (s,c,p,DC.exp[c][p],X))
 
+shapes_to_plot = {}
+nuis_has_plots = set()
+nuis_bin_has_plots = set()
 for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
     if ("param" in pdf) or ("Param" in pdf) or ("discrete" in pdf): 
     	 if options.all: outParams[lsyst]=[pdf,pdfargs]
@@ -107,8 +129,10 @@ for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
             if errline[b][p] == 0: continue
 	    numKeysFound+=1
             processes[p] = True
+            isShape = False
 	    if "shape" in pdf and MB.isShapeSystematic(b,p,lsyst):
 		vals = []
+                isShape = True
 
 		systShapeName = lsyst
 		if (lsyst,b,p) in DC.systematicsShapeMap.keys(): systShapeName = DC.systematicsShapeMap[(lsyst,b,p)]
@@ -118,6 +142,10 @@ for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
 		if objC.InheritsFrom("TH1"): valU,valD,valC =  objU.Integral(), objD.Integral(), objC.Integral()
 		elif objC.InheritsFrom("RooDataHist"): valU,valD,valC =  objU.sumEntries(), objD.sumEntries(), objC.sumEntries()
 
+                if any(re.match(pat, lsyst) for pat in options.plotShapes):
+                    shapes_to_plot[(lsyst,b,p)] = (objU,objD,objC)
+                    nuis_bin_has_plots.add((lsyst,b))
+                    nuis_has_plots.add(lsyst)
 		if valC!=0: 
 			errlines[lsyst][b][p] = "%.3f/%.3f"%(valU/valC,valD/valC)
 			vals.append(valU/valC)
@@ -138,6 +166,10 @@ for (lsyst,nofloat,pdf,pdfargs,errline) in DC.systs:
                     dowarn(lsyst,b,p,"same-signed kappa: %s" % (" / ".join(map(str,vals))))
                 elif log(max(vals)*min(vals)) > options.atol:
                     dowarn(lsyst,b,p,"very asymmetric kappa: %s" % (" / ".join(map(str,vals))))
+            if options.plotFlagged and isShape and (lsyst,b,p) in warn_chann_proc:
+                shapes_to_plot[(lsyst,b,p)] = (objU,objD,objC)
+                nuis_bin_has_plots.add((lsyst,b))
+                nuis_has_plots.add(lsyst)
         if numKeysFound == 0 : channels.remove(b)
     channelsShort = commonStems(channels)
     types = ",".join(set(types))
@@ -168,8 +200,10 @@ namesCMS2   = [ n for n in names if re.match(r"CMS_.*", n) and n not in namesCMS
 namesRest   = [ n for n in names if n not in namesCommon and n not in namesCMS1 and n not in namesCMS2 ]
 names = namesCommon + namesCMS1 + namesCMS2 + namesRest
 
+ostream = open(real_out, "w") if real_out != "-" else sys.stdout
+
 if "html" in options.format:
-    print """
+    ostream.write("""
 <html>
 <head>
 <style type="text/css">
@@ -177,6 +211,8 @@ body { font-family: 'Consolas', 'Courier New', courier, monospace; font-size: sm
 td, th { border-bottom: 1px solid black; padding: 1px 1em; vertical-align: top; }
 td.channDetails { font-size: x-small; }
 .WARN { color: red; font-weight: bold; }
+a { text-decoration: none; color : black }
+a:hover { text-decoration: underline }
 </style>
 <script type="text/javascript">
 function toggleChann(id) {
@@ -194,7 +230,7 @@ function toggleChann(id) {
 <h1>Nuisance Report</h1>
 <table>
 <tr><th>Nuisance (types)</th><th colspan="2">Range</th><th>Processes</th><th>Channels</th></tr>
-"""
+""")
     def maywarn(x,nuis,chann=None,proc=None):
         if proc != None and chann != None: 
              iswarn = ((nuis,chann,proc) in warn_chann_proc) 
@@ -205,41 +241,69 @@ function toggleChann(id) {
         else: 
              iswarn = (nuis in warn)
         return ("<span class=\"WARN\">%s</span>" % x) if iswarn else x
+    plot_bin_skip = set() # bins for which we can't make plots 
     for nuis in names:
         val = report[nuis]
-        print "<tr><td><a name=\"%s\"><b>%s</b></a></td>" % (nuis,maywarn(nuis,nuis)+"  ("+val['types']+")")
-        #print "<td>%5.3f</td><td>%5.3f</td>" % ( val['effect'][0],val['effect'][1] )
-        print "<td>%s</td><td>%s</td>" % ( maywarn(val['effect'][0],nuis),maywarn(val['effect'][1],nuis) )
-        print "<td>",", ".join((maywarn(p,nuis,proc=p) for p in val['processes'])), "</td>"
-        print "<td>%s" % ", ".join(["%s(%d)" % (k,v) for (k,v) in sorted(val['channels'])]),
-        print "<a id=\"%s_chann_toggle\" href=\"#%s\" onclick=\"toggleChann(&quot;%s&quot;)\">[+]</a></td>" % (nuis,nuis,nuis)
-        print "</tr>"
-        print "<tr id=\"%s_chann\" style=\"display: none\">" % nuis
-        print "\t<td colspan=\"5\"><table class=\"channDetails\">" 
+        link = "<a href=\"%s/index.php?match=%s-\"><img src=\"%s\"></a>" %(os.path.basename(plotdir),nuis,options.plotIconUrl) if nuis in nuis_has_plots else ""
+        ostream.write( "<tr><td><a name=\"%s\"><b>%s%s</b></a></td>" % (nuis,maywarn(nuis,nuis)+"  ("+val['types']+")",link) )
+        #ostream.write( "<td>%5.3f</td><td>%5.3f</td>" % ( val['effect'][0],val['effect'][1] ) )
+        ostream.write( "<td>%s</td><td>%s</td>" % ( maywarn(val['effect'][0],nuis),maywarn(val['effect'][1],nuis) ) )
+        ostream.write( "<td>" +  (", ".join((maywarn(p,nuis,proc=p) for p in val['processes'])) ) + "</td>" )
+        ostream.write( "<td>%s" % ", ".join(["%s(%d)" % (k,v) for (k,v) in sorted(val['channels'])]) )
+        ostream.write( "<a id=\"%s_chann_toggle\" href=\"#%s\" onclick=\"toggleChann(&quot;%s&quot;)\">[+]</a></td>" % (nuis,nuis,nuis) )
+        ostream.write( "</tr>\n" )
+        ostream.write( "<tr id=\"%s_chann\" style=\"display: none\">" % nuis )
+        ostream.write( "\t<td colspan=\"5\"><table class=\"channDetails\">"  )
         for x in sorted(val["bins"]): 
             binspan="total yields: sig %.2f, bkg %.2f, tot %.2f" % (yields_s[x],yields_b[x],yields_t[x])
             binprocs = []
             for (k,v) in sorted(errlines[nuis][x].iteritems()):
                 if v == 0: continue
                 binprocspan = "yield: %.3f; totals: sig %.2f, bkg %.2f, tot %.2f" % (DC.exp[x][k], yields_s[x],yields_b[x],yields_t[x])
-                binprocs.append( maywarn("<span title=\"%s\">%s(%s)</span>"%(binprocspan, k,v),nuis,x,k) )
-            print "\t\t<tr><td><span title=\"%s\">%s</span></td><td>%s</td></tr>" % (binspan,maywarn(x,nuis,x), ", ".join(binprocs))
-        print "\t</table></td>"
-        print "</tr>\n"
+                link = "<a href=\"%s/%s-%s-%s.png\"><img src=\"%s\"></a>" %(os.path.basename(plotdir),nuis,x,k,options.plotIconUrl) if (nuis,x,k) in shapes_to_plot else ""
+                binprocs.append( maywarn("<span title=\"%s\">%s(%s)%s</span>"%(binprocspan, k,v, link),nuis,x,k) )
+            link = "<a href=\"%s/index.php?match=%s-%s\"><img src=\"%s\"></a>" %(os.path.basename(plotdir),nuis,x,options.plotIconUrl) if (nuis,x) in nuis_bin_has_plots else ""
+            ostream.write( "\t\t<tr><td><span title=\"%s\">%s</span>%s</td><td>%s</td></tr>" % (binspan,maywarn(x,nuis,x),link, ", ".join(binprocs)) )
+        ostream.write( "\t</table></td>" )
+        ostream.write( "</tr>\n" )
+                    
     for x in outParams.keys():
-        print "\t\t<tr><td><b>%s(%s)</b></td><td>%s</td>" % (x,  outParams[x][0] , ", ".join([a for a in outParams[x][1]]))
-        print "</tr>\n"
-    print """
+        ostream.write( "\t\t<tr><td><b>%s(%s)</b></td><td>%s</td>" % (x,  outParams[x][0] , ", ".join([a for a in outParams[x][1]])) )
+        ostream.write( "</tr>\n" )
+    ostream.write( """ 
 </table>
 </body>
-</html>"""
+</html>""" )
+    ostream.close()
+    print "Now I have to make %d plots." % len(shapes_to_plot)
+    for nuis in names:
+        for b in DC.bins:
+            if b in plot_bin_skip: continue
+            for p in DC.exp[b].iterkeys():
+                 if (nuis,b,p) not in shapes_to_plot: continue
+                 objU,objD,objC = shapes_to_plot[(nuis,b,p)]
+                 if "TH1" in objC.ClassName():
+                     objC.SetLineColor(ROOT.kBlack)
+                     objU.SetLineColor(ROOT.kBlue)
+                     objD.SetLineColor(ROOT.kRed)
+                     stack = ROOT.THStack("stk","%s for bin %s, proc. %s"%(nuis,b,p))
+                     for o in objU,objD,objC:
+                         o.SetLineWidth(2)
+                         stack.Add(o)
+                     stack.Draw("HIST NOSTACK")
+                     stack.GetXaxis().SetTitle("(black = nominal, blue = %s up, red = %s down)" % (nuis,nuis))
+                     c1.Print("%s/%s-%s-%s.png" % (plotdir,nuis,b,p))
+                 else:
+                     syst.sterr.write("Notice: can't plot for bin %s, class type %s\n" % (b, nuis, objC.ClassName()))
+                     plot_bin_skip.add(b); break
+ 
 else:
     if "brief" in options.format:
-        print "%-50s  [%5s, %5s]   %-40s  %-30s" % ("   NUISANCE (TYPE)", " MIN", " MAX", "PROCESSES", "CHANNELS(#SUBCHANNELS)" )
-        print "%-50s  %14s   %-40s  %-30s" % ("-"*50, "-"*14, "-"*30, "-"*30)
+        ostream.write( "%-50s  [%5s, %5s]   %-40s  %-30s\n" % ("   NUISANCE (TYPE)", " MIN", " MAX", "PROCESSES", "CHANNELS(#SUBCHANNELS)" ) )
+        ostream.write( "%-50s  %14s   %-40s  %-30s\n" % ("-"*50, "-"*14, "-"*30, "-"*30) )
         for nuis in names:
             val = report[nuis]
-            print "%-50s (%s)  [%s, %s]   %-40s  %-30s" % ( nuis,val['types'], val['effect'][0],val['effect'][1], 
+            ostream.write( "%-50s (%s)  [%s, %s]   %-40s  %-30s\n" % ( nuis,val['types'], val['effect'][0],val['effect'][1],  
                                                                 ",".join(val['processes']),
-                                                                ",".join(["%s(%d)" % (k,v) for (k,v) in sorted(val['channels'])]))
-            
+                                                                ",".join(["%s(%d)" % (k,v) for (k,v) in sorted(val['channels'])])) )
+
